@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}{{ playlist.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <a href="{{ url_for('playlists.index') }}" class="text-muted text-decoration-none">&larr; Playlists</a>
+    <h2 class="mt-1">{{ playlist.name }}</h2>
+  </div>
+  <div class="d-flex gap-2">
+    <button class="btn btn-outline-primary" onclick="refreshTracks('{{ playlist.id }}')" id="refresh-btn">
+      &#8635; Refresh
+    </button>
+    <a href="{{ url_for('playlists.export', playlist_id=playlist.id) }}" class="btn btn-outline-secondary">Export CSV</a>
+    <button id="remove-selected-btn" class="btn btn-danger d-none" onclick="removeSelected('{{ playlist.id }}')">
+      Remove Selected
+    </button>
+  </div>
+</div>
+
+<p class="text-muted">{{ tracks|length }} tracks</p>
+
+<table class="table table-hover align-middle">
+  <thead class="table-dark">
+    <tr>
+      <th><input type="checkbox" id="select-all" onchange="toggleAll(this)"></th>
+      <th>#</th>
+      <th>Title</th>
+      <th>Artist</th>
+      <th>Album</th>
+      <th>Duration</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody id="tracks-table">
+    {% for track in tracks %}
+    <tr id="row-{{ loop.index }}" data-uri="{{ track.uri }}">
+      <td><input type="checkbox" class="track-checkbox" value="{{ track.uri }}" onchange="updateRemoveBtn()"></td>
+      <td class="text-muted">{{ loop.index }}</td>
+      <td>{{ track.name }}</td>
+      <td>{{ track.artist }}</td>
+      <td class="text-muted small">{{ track.album }}</td>
+      <td class="text-muted small">{{ (track.duration_ms // 60000) }}:{{ '%02d' % ((track.duration_ms % 60000) // 1000) }}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-danger" onclick="removeSingle('{{ playlist.id }}', '{{ track.uri }}', this)">Remove</button>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="text-center text-muted">No tracks in this playlist.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+function toggleAll(cb) {
+  document.querySelectorAll('.track-checkbox').forEach(c => c.checked = cb.checked);
+  updateRemoveBtn();
+}
+
+function updateRemoveBtn() {
+  const checked = document.querySelectorAll('.track-checkbox:checked').length;
+  const btn = document.getElementById('remove-selected-btn');
+  btn.textContent = `Remove Selected (${checked})`;
+  btn.classList.toggle('d-none', checked === 0);
+}
+
+async function removeSelected(playlistId) {
+  const uris = [...document.querySelectorAll('.track-checkbox:checked')].map(c => c.value);
+  if (!uris.length) return;
+  if (!confirm(`Remove ${uris.length} track(s)?`)) return;
+  await doRemove(playlistId, uris);
+}
+
+async function removeSingle(playlistId, uri, btn) {
+  if (!confirm('Remove this track?')) return;
+  await doRemove(playlistId, [uri]);
+}
+
+async function refreshTracks(playlistId) {
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+  try {
+    const resp = await fetch(`/playlists/${playlistId}/tracks`);
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      alert('Erro ao carregar faixas: ' + (data.error || resp.status));
+      return;
+    }
+
+    if (!Array.isArray(data)) {
+      alert('Resposta inesperada do servidor: ' + JSON.stringify(data));
+      return;
+    }
+
+    const tbody = document.getElementById('tracks-table');
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhuma faixa nesta playlist.</td></tr>';
+    } else {
+      tbody.innerHTML = data.map((t, i) => {
+        const mins = Math.floor(t.duration_ms / 60000);
+        const secs = String(Math.floor((t.duration_ms % 60000) / 1000)).padStart(2, '0');
+        const safeName = t.name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const safeArtist = t.artist.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const safeAlbum = t.album.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        return `<tr data-uri="${t.uri}">
+          <td><input type="checkbox" class="track-checkbox" value="${t.uri}" onchange="updateRemoveBtn()"></td>
+          <td class="text-muted">${i + 1}</td>
+          <td>${safeName}</td>
+          <td>${safeArtist}</td>
+          <td class="text-muted small">${safeAlbum}</td>
+          <td class="text-muted small">${mins}:${secs}</td>
+          <td><button class="btn btn-sm btn-outline-danger" onclick="removeSingle('${playlistId}', '${t.uri}', this)">Remove</button></td>
+        </tr>`;
+      }).join('');
+    }
+
+    document.querySelector('p.text-muted').textContent = `${data.length} tracks`;
+    document.getElementById('select-all').checked = false;
+    updateRemoveBtn();
+  } catch (err) {
+    alert('Erro inesperado: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '&#8635; Refresh';
+  }
+}
+
+async function doRemove(playlistId, uris) {
+  const resp = await fetch(`/playlists/${playlistId}/remove`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({uris})
+  });
+  if (resp.ok) {
+    uris.forEach(uri => {
+      document.querySelectorAll(`tr[data-uri="${uri}"]`).forEach(row => row.remove());
+    });
+    updateRemoveBtn();
+    document.getElementById('select-all').checked = false;
+  } else {
+    alert('Failed to remove tracks. Please try again.');
+  }
+}
+</script>
+{% endblock %}

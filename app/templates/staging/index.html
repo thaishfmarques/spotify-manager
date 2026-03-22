@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Staging{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Staging Area</h2>
+
+<div class="card mb-4">
+  <div class="card-header">Add Tracks from Text</div>
+  <div class="card-body">
+    <form method="POST" action="{{ url_for('staging.upload') }}" enctype="multipart/form-data">
+      <div class="mb-3">
+        <label class="form-label">Target Playlist</label>
+        <select name="playlist_id" class="form-select" required onchange="syncPlaylistName(this)">
+          <option value="">— select a playlist —</option>
+          {% for pl in playlists %}
+          <option value="{{ pl.id }}" data-name="{{ pl.name }}">{{ pl.name }}</option>
+          {% endfor %}
+        </select>
+        <input type="hidden" name="playlist_name" id="playlist_name_field">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Paste tracks <span class="text-muted small">(one per line: "Artist - Title", "Title by Artist", or just "Title")</span></label>
+        <textarea name="text" class="form-control font-monospace" rows="6" placeholder="Daft Punk - Get Lucky&#10;Bohemian Rhapsody by Queen&#10;Hotel California"></textarea>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Or upload a text file</label>
+        <input type="file" name="file" class="form-control" accept=".txt">
+      </div>
+
+      <button type="submit" class="btn btn-success">Search &amp; Stage</button>
+    </form>
+  </div>
+</div>
+
+{% if staged %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h5 class="mb-0">Staged Tracks ({{ staged|length }})</h5>
+  <form method="POST" action="{{ url_for('staging.clear') }}" onsubmit="return confirm('Clear all staged tracks?')">
+    <button class="btn btn-sm btn-outline-danger">Clear All</button>
+  </form>
+</div>
+
+{% set grouped = {} %}
+{% for t in staged %}
+  {% if t.playlist_id not in grouped %}{% set _ = grouped.update({t.playlist_id: {'name': t.playlist_name, 'tracks': []}}) %}{% endif %}
+  {% set _ = grouped[t.playlist_id].tracks.append(t) %}
+{% endfor %}
+
+{% for pl_id, group in grouped.items() %}
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>{{ group.name or pl_id }}</strong>
+    <div class="d-flex gap-2">
+      <form method="POST" action="{{ url_for('staging.apply') }}">
+        <input type="hidden" name="playlist_id" value="{{ pl_id }}">
+        <button class="btn btn-sm btn-success" onclick="return confirm('Apply resolved tracks to Spotify?')">Apply to Spotify</button>
+      </form>
+      {% if group.tracks | selectattr('status', 'equalto', 'pending') | list %}
+      <form method="POST" action="{{ url_for('staging.retry_pending') }}">
+        <input type="hidden" name="playlist_id" value="{{ pl_id }}">
+        <button class="btn btn-sm btn-warning">Retry Pending</button>
+      </form>
+      {% endif %}
+      <form method="POST" action="{{ url_for('staging.clear') }}">
+        <input type="hidden" name="playlist_id" value="{{ pl_id }}">
+        <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Clear staged tracks for this playlist?')">Clear</button>
+      </form>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Title</th>
+          <th>Artist</th>
+          <th>Status</th>
+          <th>URI / Override</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in group.tracks %}
+        <tr>
+          <td>{{ t.name }}</td>
+          <td class="text-muted">{{ t.artist }}</td>
+          <td>
+            {% if t.status == 'resolved' %}
+              <span class="badge bg-success">resolved</span>
+            {% elif t.status == 'not_found' %}
+              <span class="badge bg-danger">not found</span>
+            {% else %}
+              <span class="badge bg-secondary">pending</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if t.status == 'not_found' %}
+            <form method="POST" action="{{ url_for('staging.set_uri', track_id=t.id) }}" class="d-flex gap-1">
+              <input type="text" name="uri" class="form-control form-control-sm" placeholder="spotify:track:…" style="max-width:240px">
+              <button class="btn btn-sm btn-outline-primary">Set</button>
+            </form>
+            {% else %}
+            <span class="text-muted small font-monospace">{{ t.uri or '—' }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <form method="POST" action="{{ url_for('staging.remove', track_id=t.id) }}">
+              <button class="btn btn-sm btn-outline-danger">✕</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+
+{% else %}
+<p class="text-muted">No staged tracks yet. Use the form above to add some.</p>
+{% endif %}
+
+<script>
+function syncPlaylistName(select) {
+  const opt = select.options[select.selectedIndex];
+  document.getElementById('playlist_name_field').value = opt.dataset.name || '';
+}
+</script>
+{% endblock %}

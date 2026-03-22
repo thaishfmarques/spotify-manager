@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Playlists{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Your Playlists</h2>
+<div class="row row-cols-1 row-cols-md-3 g-4">
+  {% for pl in playlists %}
+  <div class="col">
+    <div class="card h-100 shadow-sm">
+      {% if pl.images %}
+      <img src="{{ pl.images[0].url }}" class="card-img-top" alt="{{ pl.name }}" style="height:180px;object-fit:cover;">
+      {% else %}
+      <div class="card-img-top bg-secondary d-flex align-items-center justify-content-center" style="height:180px;">
+        <span class="text-white fs-1">&#9835;</span>
+      </div>
+      {% endif %}
+      <div class="card-body">
+        <h5 class="card-title">{{ pl.name }}</h5>
+        <p class="card-text text-muted small">{{ pl.tracks.total if pl.tracks else '?' }} tracks</p>
+      </div>
+      <div class="card-footer d-flex gap-2">
+        <a href="{{ url_for('playlists.detail', playlist_id=pl.id) }}" class="btn btn-sm btn-primary flex-fill">View</a>
+        <a href="{{ url_for('playlists.export', playlist_id=pl.id) }}" class="btn btn-sm btn-outline-secondary flex-fill">Export CSV</a>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <p class="text-muted">No playlists found.</p>
+  {% endfor %}
+</div>
+{% endblock %}
