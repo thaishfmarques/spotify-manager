@@ -2,6 +2,8 @@
 
 Aplicação web local em Python/Flask para gerenciar suas playlists do Spotify: exporte para CSV, remova músicas pela interface, adicione novas músicas via arquivos de texto e gerencie uma área de staging antes de aplicar as alterações.
 
+**Nota / Autor:** Embora feito com com Claude Code e todas as suas firulas, o projeto foi feito não como portfólio e sim como solução pessoal para gerenciar minhas playlists e publiquei para compartilhar com quem quiser. Não mantenho esse repositório.
+
 ---
 
 ## Funcionalidades
